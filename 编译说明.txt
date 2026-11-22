@@ -1,0 +1,83 @@
+编译说明
+========
+
+本程序是【单文件】C# 源码，不需要 Visual Studio，
+用 Windows 自带的 csc.exe 就能编译。
+
+一、需要的文件
+--------------
+    DiskLayoutGui.cs     源码（唯一一个）
+    app.ico              图标（可选）
+
+二、编译命令
+------------
+    在源码目录里打开命令提示符，执行：
+
+    "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" ^
+       -target:winexe -optimize+ -platform:x64 -codepage:65001 ^
+       -win32icon:app.ico ^
+       -r:System.Windows.Forms.dll -r:System.Drawing.dll ^
+       -out:DiskLayout.exe DiskLayoutGui.cs
+
+    一行版（方便复制）：
+
+    "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" -target:winexe -optimize+ -platform:x64 -codepage:65001 -win32icon:app.ico -r:System.Windows.Forms.dll -r:System.Drawing.dll -out:DiskLayout.exe DiskLayoutGui.cs
+
+三、三个容易踩的坑
+------------------
+    1. 必须用 -target:winexe
+       用 -target:exe 编译出来是控制台程序，双击会闪一下黑框然后退出。
+
+    2. 必须加 -codepage:65001
+       源码是 UTF-8，不加这个参数，程序里的中文会变乱码。
+
+    3. 路径里有空格要加引号
+       比如 "C:\Program Files\..." 这种。
+
+四、运行环境
+------------
+    Windows 7 及以上
+    .NET Framework 4.0 及以上（Win7 之后都自带，不用另装）
+    运行时需要管理员权限（会弹 UAC）
+
+    Win7 之外的旧系统可能缺 logman/tracerpt，录制会失败。
+
+五、代码结构（单文件，从上到下）
+--------------------------------
+    Program            程序入口、全局异常捕获、崩溃日志
+    MainForm           主窗口
+                         · 录制（logman 启停）
+                         · 解析（tracerpt → XML → 事件流 → 切段）
+                         · 分析（NO_BUFFERING 读两遍，算提升百分比）
+                         · 重排（找空区 + FSCTL_MOVE_FILE 逐个搬移）
+                         · 全局优化（多段按读取签名分块）
+                         · 快速扫描、漂移检测、回滚、冷数据挪到内圈
+    ColdPickForm       选文件窗口（文件夹逐层浏览）
+    HistoryForm        历史记录 + 对比两条
+    ListPickForm       通用列表选择框
+
+六、用到的系统接口
+------------------
+    DeviceIoControl + FSCTL_GET_RETRIEVAL_POINTERS   查文件的物理位置
+    DeviceIoControl + FSCTL_MOVE_FILE                搬移文件占用的数据块
+    DeviceIoControl + FSCTL_GET_VOLUME_BITMAP        查卷的空闲位图
+    DeviceIoControl + IOCTL_STORAGE_QUERY_PROPERTY   判断机械盘/固态
+    logman / tracerpt                                录制并导出 ETW 轨迹
+    schtasks                                         开关 Windows 自动整理
+
+七、数据目录
+------------
+    程序运行后会在 exe 同目录建一个 data\ 子目录：
+
+        data\settings.txt    上次选的目录
+        data\history.csv     录制历史
+        data\applied.csv     优化记录（冲突检测用）
+        data\crash.log       崩溃日志（出问题才有）
+
+    整个 exe + data 目录可以一起拷走，记录会跟着走。
+    如果 exe 放在没有写权限的目录（比如 Program Files），
+    data 会自动落到 %LOCALAPPDATA%\DiskLayout\。
+
+
+注意：现在编译必须带 -win32manifest:app.manifest，
+否则程序不会在启动时申请管理员权限。
